@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ระบบจัดการคลังสินค้า - Pear Inventory</title>
   
-  <!-- 1. ดึง Tailwind CSS สำหรับจัดการสไตล์ -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <!-- 2. ดึง React และ ReactDOM -->
+  <!-- React & ReactDOM -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   
-  <!-- 3. ดึง Babel เพื่อแปลงโค้ด JSX บนเบราว์เซอร์ -->
+  <!-- Babel -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
-  <!-- ฟอนต์ภาษาไทยและฟอนต์ตัวเลข -->
+  <!-- Typography Fonts -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
 
   <style>
@@ -28,40 +28,42 @@
 
   <div id="root"></div>
 
-  <!-- โค้ด React อยู่ในสคริปต์ประเภท text/babel -->
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback } = React;
 
-    // Web App URL ของ Google Apps Script
+    // Web App URL ของ Google Apps Script ของคุณ
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzWBYTh_hX4LqWJVccv92iEFIlh2ccdQONP5ru9aSqmrLP4r9xAJqiH_oc4ck0cvY7qbA/exec";
 
+    // 📦 รายการสินค้าหลัก (Master Products Catalog)
     const DEFAULT_PRODUCTS = [
-      { id: "p1",  category: "น้ำมันพืช",  name: "เกสร",       type: "ถุง", size: "1 ลิตร",   pack: 12, barcode: "8851494007530" },
-      { id: "p2",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1 ลิตร",   pack: 12, barcode: "8851494007523" },
-      { id: "p3",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/2 ลิตร", pack: 24, barcode: "8851494007547" },
-      { id: "p4",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/4 ลิตร", pack: 48, barcode: "8851494007561" },
-      { id: "p5",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1 ลิตร",   pack: 12, barcode: "" },
-      { id: "p6",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/2 ลิตร", pack: 24, barcode: "" },
-      { id: "p7",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/4 ลิตร", pack: 48, barcode: "" },
-      { id: "p8",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "ขาว", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-      { id: "p9",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "แดง", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-      { id: "p10", category: "น้ำตาลทราย", name: "วังขนาย",    type: "ขาว", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-      { id: "p11", category: "น้ำตาลทราย", name: "วังขนาย",    type: "แดง", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-      { id: "p12", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "ขาว", size: "1 กิโลกรัม", pack: 50, barcode: "" },
-      { id: "p13", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "แดง", size: "1 กิโลกรัม", pack: 50, barcode: "" },
+      { id: "p1",  category: "น้ำมันพืช",  name: "เกสร",       type: "ถุง", size: "1 ลิตร",   pack: 12 },
+      { id: "p2",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1 ลิตร",   pack: 12 },
+      { id: "p3",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/2 ลิตร", pack: 24 },
+      { id: "p4",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/4 ลิตร", pack: 48 },
+      { id: "p5",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1 ลิตร",   pack: 12 },
+      { id: "p6",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/2 ลิตร", pack: 24 },
+      { id: "p7",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/4 ลิตร", pack: 48 },
+      { id: "p8",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "ขาว", size: "1 กิโลกรัม", pack: 25 },
+      { id: "p9",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "แดง", size: "1 กิโลกรัม", pack: 25 },
+      { id: "p10", category: "น้ำตาลทราย", name: "วังขนาย",    type: "ขาว", size: "1 กิโลกรัม", pack: 25 },
+      { id: "p11", category: "น้ำตาลทราย", name: "วังขนาย",    type: "แดง", size: "1 กิโลกรัม", pack: 25 },
+      { id: "p12", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "ขาว", size: "1 กิโลกรัม", pack: 50 },
+      { id: "p13", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "แดง", size: "1 กิโลกรัม", pack: 50 },
     ];
 
     const WAREHOUSES = [1, 2, 3, 4, 5, 6];
     const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString("th-TH") : "0");
+    const fmtMoney = (n) => Number.isFinite(n) ? n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
+    const today = () => new Date().toISOString().slice(0, 10);
 
     function InventoryApp() {
       const [products] = useState(DEFAULT_PRODUCTS);
       const [transactions, setTransactions] = useState([]);
       const [loading, setLoading] = useState(true);
-      const [saveError, setSaveError] = useState(null);
-      const [tab, setTab] = useState("dashboard");
+      const [statusMsg, setStatusMsg] = useState("");
+      const [tab, setTab] = useState("dashboard"); // 'dashboard' | 1..6 | 'history'
 
-      // ดึงข้อมูลจาก Google Sheets
+      // 🔄 1. ฟังก์ชันดึงข้อมูลจาก Google Sheets (GET)
       const fetchTransactions = useCallback(async () => {
         try {
           setLoading(true);
@@ -69,12 +71,12 @@
           const data = await res.json();
           if (data.status === "success" && Array.isArray(data.transactions)) {
             setTransactions(data.transactions);
-            setSaveError(null);
+            setStatusMsg("");
           } else {
-            setSaveError(data.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล");
+            setStatusMsg("⚠️ โหลดข้อมูลไม่สำเร็จ: " + (data.message || ""));
           }
         } catch (e) {
-          setSaveError("ไม่สามารถเชื่อมต่อกับ Google Sheets ได้ กรุณาเช็คสิทธิ์การใช้งานของ Web App");
+          setStatusMsg("❌ เชื่อมต่อ Google Sheets ไม่ได้ กรุณาตรวจสอบสิทธิ์การ Deploy (Anyone)");
         } finally {
           setLoading(false);
         }
@@ -84,7 +86,50 @@
         fetchTransactions();
       }, [fetchTransactions]);
 
-      // คำนวณยอดคงเหลือ
+      // ➕ 2. ฟังก์ชันเพิ่มรายการใหม่ลง Google Sheets (POST)
+      const addTransaction = async (tx) => {
+        const newTx = {
+          id: `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          ...tx
+        };
+
+        // อัปเดตหน้าทันทีเพื่อให้รู้สึกเร็ว (Optimistic UI)
+        setTransactions((prev) => [newTx, ...prev]);
+
+        try {
+          const res = await fetch(GAS_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: "add", transaction: newTx })
+          });
+          const data = await res.json();
+          if (data.status !== "success") throw new Error(data.message);
+        } catch (e) {
+          alert("บันทึกลง Google Sheets ไม่สำเร็จ ระบบจะโหลดข้อมูลใหม่อีกครั้ง");
+          fetchTransactions();
+        }
+      };
+
+      // 🗑️ 3. ฟังก์ชันลบรายการออกจาก Google Sheets (POST)
+      const deleteTransaction = async (id) => {
+        if (!confirm("คุณต้องการลบรายการนี้ใช่หรือไม่?")) return;
+        setTransactions((prev) => prev.filter((t) => t.id !== id));
+
+        try {
+          const res = await fetch(GAS_API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: "delete", id })
+          });
+          const data = await res.json();
+          if (data.status !== "success") throw new Error(data.message);
+        } catch (e) {
+          alert("ลบรายการไม่สำเร็จ ระบบจะโหลดข้อมูลใหม่อีกครั้ง");
+          fetchTransactions();
+        }
+      };
+
+      // 🧮 4. คำนวณยอดคงเหลือรายโกดังและมูลค่า (Weighted Average Cost)
       const balances = useMemo(() => {
         const b = {};
         for (const p of products) {
@@ -98,8 +143,10 @@
           if (!b[t.productId]) continue;
           const cell = b[t.productId][t.warehouse];
           if (!cell) continue;
+
           const qty = Number(t.qty) || 0;
           const cost = Number(t.cost) || 0;
+
           if (t.type === "in") {
             cell.qtyIn += qty;
             cell.remaining += qty;
@@ -114,6 +161,7 @@
         return b;
       }, [products, transactions]);
 
+      // 📊 5. สรุปรวมยอดคงเหลือรวมทุกโกดัง
       const totals = useMemo(() => {
         const t = {};
         for (const p of products) {
@@ -132,7 +180,7 @@
       if (loading) {
         return (
           <div className="min-h-screen flex flex-col items-center justify-center">
-            <div className="text-amber-700 font-mono text-lg animate-pulse">กำลังโหลดข้อมูลคลังสินค้า...</div>
+            <div className="text-amber-700 font-mono text-lg animate-pulse">กำลังเชื่อมต่อฐานข้อมูล Google Sheets...</div>
           </div>
         );
       }
@@ -142,18 +190,18 @@
           {/* Header */}
           <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-stone-200">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-stone-900 flex items-center justify-center text-white font-bold">
+              <div className="w-10 h-10 rounded-lg bg-stone-900 flex items-center justify-center text-white text-xl font-bold">
                 📦
               </div>
               <div>
                 <h1 className="title-font font-bold text-lg">Pear Inventory</h1>
-                <p className="text-xs text-stone-500">ระบบจัดการคลังสินค้า · 6 โกดัง</p>
+                <p className="text-xs text-stone-500">ระบบคลังสินค้า · เชื่อมต่อ Google Sheets</p>
               </div>
             </div>
-            {saveError && <div className="text-red-600 text-xs font-medium bg-red-50 p-2 rounded-lg">{saveError}</div>}
+            {statusMsg && <div className="text-red-600 text-xs font-medium bg-red-50 p-2 rounded-lg">{statusMsg}</div>}
           </header>
 
-          {/* Navigation Tab */}
+          {/* Navigation Bar */}
           <nav className="flex gap-2 px-6 py-3 bg-white border-b border-stone-200 overflow-x-auto">
             <button 
               onClick={() => setTab("dashboard")} 
@@ -168,9 +216,14 @@
                 โกดัง {String(w).padStart(2, "0")}
               </button>
             ))}
+            <button 
+              onClick={() => setTab("history")} 
+              className={`px-4 py-2 rounded-lg text-sm font-medium border ${tab === 'history' ? 'bg-stone-900 text-white border-stone-900' : 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+              ประวัติทั้งหมด
+            </button>
           </nav>
 
-          {/* Main Content Area */}
+          {/* Main Content */}
           <main className="max-w-5xl mx-auto p-6">
             {tab === "dashboard" && (
               <div>
@@ -185,7 +238,6 @@
                   </div>
                 </div>
 
-                {/* Product Table */}
                 <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-right">
@@ -215,7 +267,166 @@
                 </div>
               </div>
             )}
+
+            {/* หน้าจัดการโกดัง 1-6 */}
+            {typeof tab === "number" && (
+              <WarehouseView 
+                warehouse={tab} 
+                products={products} 
+                balances={balances} 
+                transactions={transactions.filter(t => Number(t.warehouse) === tab)}
+                onAdd={addTransaction}
+                onDelete={deleteTransaction}
+              />
+            )}
+
+            {/* หน้าดูประวัติทั้งหมด */}
+            {tab === "history" && (
+              <HistoryView 
+                products={products} 
+                transactions={transactions} 
+                onDelete={deleteTransaction} 
+              />
+            )}
           </main>
+        </div>
+      );
+    }
+
+    // Component หน้าจัดการประจำโกดัง
+    function WarehouseView({ warehouse, products, balances, transactions, onAdd, onDelete }) {
+      const [productId, setProductId] = useState(products[0]?.id || "");
+      const [type, setType] = useState("in");
+      const [qty, setQty] = useState("");
+      const [cost, setCost] = useState("");
+      const [date, setDate] = useState(today());
+      const [note, setNote] = useState("");
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const numQty = parseFloat(qty);
+        if (!numQty || numQty <= 0) return alert("กรุณากรอกจำนวนให้ถูกต้อง");
+        
+        onAdd({
+          productId,
+          warehouse,
+          type,
+          qty: numQty,
+          cost: type === "in" ? parseFloat(cost) || 0 : 0,
+          date,
+          note: note.trim()
+        });
+
+        setQty("");
+        setCost("");
+        setNote("");
+      };
+
+      return (
+        <div className="space-y-6">
+          <h2 className="title-font font-bold text-xl">โกดัง {String(warehouse).padStart(2, "0")}</h2>
+
+          {/* ฟอร์มบันทึกรายการ */}
+          <form onSubmit={handleSubmit} className="bg-white p-4 rounded-xl border border-stone-200 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">เลือกสินค้า</label>
+              <select value={productId} onChange={(e) => setProductId(e.target.value)} className="w-full border rounded-lg p-2 text-sm">
+                {products.map(p => <option key={p.id} value={p.id}>{p.name} · {p.type} ({p.size})</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">ประเภท</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full border rounded-lg p-2 text-sm">
+                <option value="in">รับเข้า (IN)</option>
+                <option value="out">เบิกจ่าย (OUT)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">จำนวน</label>
+              <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="0" className="w-full border rounded-lg p-2 text-sm mono" required />
+            </div>
+            {type === "in" && (
+              <div>
+                <label className="block text-xs font-medium text-stone-600 mb-1">ต้นทุน/หน่วย (บาท)</label>
+                <input type="number" step="any" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="0.00" className="w-full border rounded-lg p-2 text-sm mono" />
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">วันที่</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border rounded-lg p-2 text-sm mono" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-stone-600 mb-1">หมายเหตุ</label>
+              <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="ระบุเหตุผล..." className="w-full border rounded-lg p-2 text-sm" />
+            </div>
+            <div className="md:col-span-3">
+              <button type="submit" className="bg-stone-900 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-stone-800">
+                + บันทึกรายการลง Google Sheets
+              </button>
+            </div>
+          </form>
+
+          {/* ตารางประวัติของโกดังนี้ */}
+          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+            <div className="p-3 font-semibold border-b text-sm">รายการสตรีมมิ่งในโกดัง {warehouse}</div>
+            <TransactionTable products={products} transactions={transactions} onDelete={onDelete} />
+          </div>
+        </div>
+      );
+    }
+
+    function HistoryView({ products, transactions, onDelete }) {
+      return (
+        <div className="space-y-4">
+          <h2 className="title-font font-bold text-xl">ประวัติรายการทั้งหมดทุกโกดัง</h2>
+          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+            <TransactionTable products={products} transactions={transactions} onDelete={onDelete} showWarehouse />
+          </div>
+        </div>
+      );
+    }
+
+    function TransactionTable({ products, transactions, onDelete, showWarehouse }) {
+      const pMap = useMemo(() => Object.fromEntries(products.map(p => [p.id, p])), [products]);
+      if (transactions.length === 0) return <div className="p-4 text-center text-stone-400 text-sm">ยังไม่มีรายการบันทึก</div>;
+
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-stone-50 border-b text-xs text-stone-500 uppercase">
+              <tr>
+                <th className="p-3">วันที่</th>
+                <th className="p-3">สินค้า</th>
+                {showWarehouse && <th className="p-3">โกดัง</th>}
+                <th className="p-3">ประเภท</th>
+                <th className="p-3 text-right">จำนวน</th>
+                <th className="p-3 text-right">ต้นทุน/หน่วย</th>
+                <th className="p-3">หมายเหตุ</th>
+                <th className="p-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100 mono">
+              {transactions.map(t => {
+                const p = pMap[t.productId];
+                return (
+                  <tr key={t.id}>
+                    <td className="p-3 text-xs">{t.date}</td>
+                    <td className="p-3 font-sans font-medium">{p ? `${p.name} · ${p.type}` : t.productId}</td>
+                    {showWarehouse && <td className="p-3">โกดัง {t.warehouse}</td>}
+                    <td className={`p-3 font-semibold ${t.type === 'in' ? 'text-emerald-700' : 'text-red-600'}`}>
+                      {t.type === 'in' ? 'รับเข้า' : 'เบิกจ่าย'}
+                    </td>
+                    <td className="p-3 text-right font-bold">{fmt(t.qty)}</td>
+                    <td className="p-3 text-right">{t.type === 'in' ? fmtMoney(t.cost) : '—'}</td>
+                    <td className="p-3 font-sans text-xs text-stone-500">{t.note || '—'}</td>
+                    <td className="p-3 text-right">
+                      <button onClick={() => onDelete(t.id)} className="text-red-500 hover:text-red-700 text-xs font-sans">ลบ</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       );
     }
