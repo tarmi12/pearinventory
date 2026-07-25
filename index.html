@@ -1,703 +1,235 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import {
-  Package, ArrowDownCircle, ArrowUpCircle, Trash2, Plus, LayoutGrid,
-  History, AlertTriangle, Search, Loader2, Boxes
-} from "lucide-react";
-
-// ⚠️ นำ Web App URL จาก Google Apps Script มาวางที่นี่
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzWBYTh_hX4LqWJVccv92iEFIlh2ccdQONP5ru9aSqmrLP4r9xAJqiH_oc4ck0cvY7qbA/exec";
-
-// Master Catalog
-const DEFAULT_PRODUCTS = [
-  { id: "p1",  category: "น้ำมันพืช",  name: "เกสร",       type: "ถุง", size: "1 ลิตร",   pack: 12, barcode: "8851494007530" },
-  { id: "p2",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1 ลิตร",   pack: 12, barcode: "8851494007523" },
-  { id: "p3",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/2 ลิตร", pack: 24, barcode: "8851494007547" },
-  { id: "p4",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/4 ลิตร", pack: 48, barcode: "8851494007561" },
-  { id: "p5",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1 ลิตร",   pack: 12, barcode: "" },
-  { id: "p6",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/2 ลิตร", pack: 24, barcode: "" },
-  { id: "p7",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/4 ลิตร", pack: 48, barcode: "" },
-  { id: "p8",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "ขาว", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-  { id: "p9",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "แดง", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-  { id: "p10", category: "น้ำตาลทราย", name: "วังขนาย",    type: "ขาว", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-  { id: "p11", category: "น้ำตาลทราย", name: "วังขนาย",    type: "แดง", size: "1 กิโลกรัม", pack: 25, barcode: "" },
-  { id: "p12", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "ขาว", size: "1 กิโลกรัม", pack: 50, barcode: "" },
-  { id: "p13", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "แดง", size: "1 กิโลกรัม", pack: 50, barcode: "" },
-];
-
-const WAREHOUSES = [1, 2, 3, 4, 5, 6];
-
-const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString("th-TH") : "0");
-const fmtMoney = (n) =>
-  Number.isFinite(n) ? n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
-const today = () => new Date().toISOString().slice(0, 10);
-
-export default function InventorySystem() {
-  const [products] = useState(DEFAULT_PRODUCTS);
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saveError, setSaveError] = useState(null);
-  const [tab, setTab] = useState("dashboard");
-  const [query, setQuery] = useState("");
-
-  // ---- ดึงข้อมูลเริ่มต้นจาก Google Sheets ผ่าน GAS ----
-  const fetchTransactions = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(GAS_API_URL);
-      const data = await res.json();
-      if (data.status === "success" && Array.isArray(data.transactions)) {
-        setTransactions(data.transactions);
-      } else {
-        throw new Error(data.message || "Failed to load");
-      }
-    } catch (e) {
-      setSaveError("ดึงข้อมูลจาก Google Sheets ไม่สำเร็จ");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
-
-  // ---- บันทึกรายการใหม่ลง Google Sheets ----
-  const addTransaction = useCallback(async (tx) => {
-    const newTx = {
-      id: `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      ...tx,
-    };
-
-    // Update State หน้าจอก่อนทันที (Optimistic UI Update) เพื่อความรวดเร็ว
-    setTransactions((prev) => [newTx, ...prev]);
-
-    try {
-      const res = await fetch(GAS_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" }, // ใช้ text/plain เพื่อป้องกันปัญหา CORS กับ GAS
-        body: JSON.stringify({ action: "add", transaction: newTx }),
-      });
-      const data = await res.json();
-      if (data.status !== "success") throw new Error(data.message);
-      setSaveError(null);
-    } catch (e) {
-      setSaveError("บันทึกลง Google Sheets ไม่สำเร็จ");
-      fetchTransactions(); // ดึงข้อมูลกลับมาหากเกิดข้อผิดพลาด
-    }
-  }, [fetchTransactions]);
-
-  // ---- ลบรายการออกจาก Google Sheets ----
-  const deleteTransaction = useCallback(async (id) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
-
-    try {
-      const res = await fetch(GAS_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "delete", id }),
-      });
-      const data = await res.json();
-      if (data.status !== "success") throw new Error(data.message);
-      setSaveError(null);
-    } catch (e) {
-      setSaveError("ลบรายการไม่สำเร็จ");
-      fetchTransactions();
-    }
-  }, [fetchTransactions]);
-
-  // ---- คำนวณยอดคงเหลือและมูลค่าตามระบบ Weighted Average Cost ----
-  const balances = useMemo(() => {
-    const b = {};
-    for (const p of products) {
-      b[p.id] = {};
-      for (const w of WAREHOUSES) {
-        b[p.id][w] = { qtyIn: 0, qtyOut: 0, remaining: 0, value: 0 };
-      }
-    }
-
-    // เรียงประวัติจากเก่าไปใหม่เพื่อคิดต้นทุนตามลำดับเวลาจริง
-    const sortedTx = [...transactions].reverse();
-
-    for (const t of sortedTx) {
-      if (!b[t.productId]) continue;
-      const cell = b[t.productId][t.warehouse];
-      if (!cell) continue;
-
-      const qty = Number(t.qty) || 0;
-      const cost = Number(t.cost) || 0;
-
-      if (t.type === "in") {
-        cell.qtyIn += qty;
-        cell.remaining += qty;
-        cell.value += qty * cost;
-      } else if (t.type === "out") {
-        cell.qtyOut += qty;
-        const avgCost = cell.remaining > 0 ? cell.value / cell.remaining : 0;
-        cell.remaining = Math.max(0, cell.remaining - qty);
-        cell.value = Math.max(0, cell.value - (qty * avgCost));
-      }
-    }
-
-    return b;
-  }, [products, transactions]);
-
-  const totals = useMemo(() => {
-    const t = {};
-    for (const p of products) {
-      let remaining = 0, value = 0;
-      for (const w of WAREHOUSES) {
-        remaining += balances[p.id][w].remaining;
-        value += balances[p.id][w].value;
-      }
-      t[p.id] = { remaining, value };
-    }
-    return t;
-  }, [products, balances]);
-
-  const grandTotalRemaining = useMemo(
-    () => Object.values(totals).reduce((s, x) => s + x.remaining, 0),
-    [totals]
-  );
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจัดการคลังสินค้า - Pear Inventory</title>
   
-  const lowStockCount = useMemo(
-    () => products.filter((p) => totals[p.id].remaining <= 0).length,
-    [products, totals]
-  );
+  <!-- 1. ดึง Tailwind CSS สำหรับจัดการสไตล์ -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 2. ดึง React และ ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 3. ดึง Babel เพื่อแปลงโค้ด JSX บนเบราว์เซอร์ -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- 4. ดึง Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
 
-  const filteredProducts = useMemo(() => {
-    if (!query.trim()) return products;
-    const q = query.trim().toLowerCase();
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.type.toLowerCase().includes(q) ||
-        p.barcode.includes(q)
-    );
-  }, [products, query]);
+  <!-- ฟอนต์ภาษาไทยและฟอนต์ตัวเลข -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
 
-  if (loading) {
-    return (
-      <div style={styles.loadingWrap}>
-        <Loader2 className="animate-spin" size={28} color="#B8862B" />
-        <div style={{ marginTop: 12, fontFamily: "'IBM Plex Mono', monospace", color: "#5B6A61" }}>
-          กำลังดึงข้อมูลจาก Google Sheets...
-        </div>
-      </div>
-    );
-  }
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #F6F5F1; color: #1F2A24; }
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+    .title-font { font-family: 'Space Grotesk', sans-serif; }
+  </style>
+</head>
+<body>
 
-  return (
-    <div style={styles.app}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
-        * { box-sizing: border-box; }
-        .tab-scroll::-webkit-scrollbar { height: 6px; }
-        .tab-scroll::-webkit-scrollbar-thumb { background: #D8D3C4; border-radius: 3px; }
-        table.ledger td, table.ledger th { font-family: 'IBM Plex Mono', monospace; }
-      `}</style>
+  <div id="root"></div>
 
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
-          <div style={styles.logoMark}><Boxes size={20} color="#F6F5F1" /></div>
-          <div>
-            <div style={styles.title}>ระบบคลังสินค้า (Google Sheets Mode)</div>
-            <div style={styles.subtitle}>เชื่อมต่อข้อมูลกับ Google Sheets สำเร็จ</div>
+  <!-- โค้ด React อยู่ในสคริปต์ประเภท text/babel -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useCallback } = React;
+
+    // ⚠️ ใส่ Web App URL ของ Google Apps Script ของคุณที่นี่
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzWBYTh_hX4LqWJVccv92iEFIlh2ccdQONP5ru9aSqmrLP4r9xAJqiH_oc4ck0cvY7qbA/exec";
+
+    const DEFAULT_PRODUCTS = [
+      { id: "p1",  category: "น้ำมันพืช",  name: "เกสร",       type: "ถุง", size: "1 ลิตร",   pack: 12, barcode: "8851494007530" },
+      { id: "p2",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1 ลิตร",   pack: 12, barcode: "8851494007523" },
+      { id: "p3",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/2 ลิตร", pack: 24, barcode: "8851494007547" },
+      { id: "p4",  category: "น้ำมันพืช",  name: "เกสร",       type: "ขวด", size: "1/4 ลิตร", pack: 48, barcode: "8851494007561" },
+      { id: "p5",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1 ลิตร",   pack: 12, barcode: "" },
+      { id: "p6",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/2 ลิตร", pack: 24, barcode: "" },
+      { id: "p7",  category: "น้ำมันพืช",  name: "โอลีน",      type: "ขวด", size: "1/4 ลิตร", pack: 48, barcode: "" },
+      { id: "p8",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "ขาว", size: "1 กิโลกรัม", pack: 25, barcode: "" },
+      { id: "p9",  category: "น้ำตาลทราย", name: "มิตรผล",     type: "แดง", size: "1 กิโลกรัม", pack: 25, barcode: "" },
+      { id: "p10", category: "น้ำตาลทราย", name: "วังขนาย",    type: "ขาว", size: "1 กิโลกรัม", pack: 25, barcode: "" },
+      { id: "p11", category: "น้ำตาลทราย", name: "วังขนาย",    type: "แดง", size: "1 กิโลกรัม", pack: 25, barcode: "" },
+      { id: "p12", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "ขาว", size: "1 กิโลกรัม", pack: 50, barcode: "" },
+      { id: "p13", category: "น้ำตาลทราย", name: "ไม่มียี่ห้อ", type: "แดง", size: "1 กิโลกรัม", pack: 50, barcode: "" },
+    ];
+
+    const WAREHOUSES = [1, 2, 3, 4, 5, 6];
+    const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString("th-TH") : "0");
+    const fmtMoney = (n) => Number.isFinite(n) ? n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
+    const today = () => new Date().toISOString().slice(0, 10);
+
+    function InventoryApp() {
+      const [products] = useState(DEFAULT_PRODUCTS);
+      const [transactions, setTransactions] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [saveError, setSaveError] = useState(null);
+      const [tab, setTab] = useState("dashboard");
+      const [query, setQuery] = useState("");
+
+      // ดึงข้อมูลจาก Google Sheets
+      const fetchTransactions = useCallback(async () => {
+        try {
+          setLoading(true);
+          const res = await fetch(GAS_API_URL);
+          const data = await res.json();
+          if (data.status === "success" && Array.isArray(data.transactions)) {
+            setTransactions(data.transactions);
+          }
+        } catch (e) {
+          setSaveError("ไม่สามารถเชื่อมต่อกับ Google Sheets ได้");
+        } finally {
+          setLoading(false);
+        }
+      }, []);
+
+      useEffect(() => {
+        if (GAS_API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
+          fetchTransactions();
+        } else {
+          setLoading(false);
+        }
+      }, [fetchTransactions]);
+
+      // คำนวณยอดคงเหลือ
+      const balances = useMemo(() => {
+        const b = {};
+        for (const p of products) {
+          b[p.id] = {};
+          for (const w of WAREHOUSES) {
+            b[p.id][w] = { qtyIn: 0, qtyOut: 0, remaining: 0, value: 0 };
+          }
+        }
+        const sortedTx = [...transactions].reverse();
+        for (const t of sortedTx) {
+          if (!b[t.productId]) continue;
+          const cell = b[t.productId][t.warehouse];
+          if (!cell) continue;
+          const qty = Number(t.qty) || 0;
+          const cost = Number(t.cost) || 0;
+          if (t.type === "in") {
+            cell.qtyIn += qty;
+            cell.remaining += qty;
+            cell.value += qty * cost;
+          } else if (t.type === "out") {
+            cell.qtyOut += qty;
+            const avgCost = cell.remaining > 0 ? cell.value / cell.remaining : 0;
+            cell.remaining = Math.max(0, cell.remaining - qty);
+            cell.value = Math.max(0, cell.value - (qty * avgCost));
+          }
+        }
+        return b;
+      }, [products, transactions]);
+
+      const totals = useMemo(() => {
+        const t = {};
+        for (const p of products) {
+          let remaining = 0, value = 0;
+          for (const w of WAREHOUSES) {
+            remaining += balances[p.id][w].remaining;
+            value += balances[p.id][w].value;
+          }
+          t[p.id] = { remaining, value };
+        }
+        return t;
+      }, [products, balances]);
+
+      const grandTotalRemaining = useMemo(() => Object.values(totals).reduce((s, x) => s + x.remaining, 0), [totals]);
+
+      if (loading) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center">
+            <div className="text-amber-700 font-mono text-lg animate-pulse">กำลังโหลดข้อมูลคลังสินค้า...</div>
           </div>
-        </div>
-        {saveError && (
-          <div style={styles.saveError}><AlertTriangle size={14} /> {saveError}</div>
-        )}
-      </header>
-
-      <nav className="tab-scroll" style={styles.tabBar}>
-        <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")} icon={<LayoutGrid size={15} />} label="ภาพรวม" />
-        {WAREHOUSES.map((w) => (
-          <BinTab key={w} number={w} active={tab === w} onClick={() => setTab(w)} />
-        ))}
-        <TabButton active={tab === "history"} onClick={() => setTab("history")} icon={<History size={15} />} label="ประวัติ" />
-      </nav>
-
-      <main style={styles.main}>
-        {tab === "dashboard" && (
-          <Dashboard
-            products={filteredProducts}
-            balances={balances}
-            totals={totals}
-            grandTotalRemaining={grandTotalRemaining}
-            lowStockCount={lowStockCount}
-            query={query}
-            setQuery={setQuery}
-          />
-        )}
-        {typeof tab === "number" && (
-          <WarehouseView
-            warehouse={tab}
-            products={products}
-            balances={balances}
-            transactions={transactions.filter((t) => t.warehouse === tab)}
-            onAdd={addTransaction}
-            onDelete={deleteTransaction}
-          />
-        )}
-        {tab === "history" && (
-          <HistoryView products={products} transactions={transactions} onDelete={deleteTransaction} />
-        )}
-      </main>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function TabButton({ active, onClick, icon, label }) {
-  return (
-    <button onClick={onClick} style={{ ...styles.tabBtn, ...(active ? styles.tabBtnActive : {}) }}>
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function BinTab({ number, active, onClick }) {
-  return (
-    <button onClick={onClick} style={{ ...styles.binTab, ...(active ? styles.binTabActive : {}) }}>
-      <span style={styles.binHole} />
-      <span style={styles.binLabel}>โกดัง</span>
-      <span style={styles.binNumber}>{String(number).padStart(2, "0")}</span>
-    </button>
-  );
-}
-
-function Dashboard({ products, balances, totals, grandTotalRemaining, lowStockCount, query, setQuery }) {
-  return (
-    <div>
-      <div style={styles.summaryRow}>
-        <SummaryCard label="รายการสินค้าทั้งหมด" value={fmt(products.length)} unit="SKU" />
-        <SummaryCard label="คงเหลือรวมทุกโกดัง" value={fmt(grandTotalRemaining)} unit="หน่วย" accent="#3F6B4E" />
-        <SummaryCard
-          label="สินค้าใกล้หมด/หมด"
-          value={fmt(lowStockCount)}
-          unit="รายการ"
-          accent={lowStockCount > 0 ? "#B33A3A" : "#5B6A61"}
-        />
-      </div>
-
-      <div style={styles.searchWrap}>
-        <Search size={15} color="#8A8477" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="ค้นหาสินค้า ชื่อ ยี่ห้อ ชนิด หรือบาร์โค้ด"
-          style={styles.searchInput}
-        />
-      </div>
-
-      <div style={styles.tableCard}>
-        <div style={{ overflowX: "auto" }}>
-          <table className="ledger" style={styles.table}>
-            <thead>
-              <tr>
-                <th style={{ ...styles.th, ...styles.thLeft, fontFamily: "'Inter', sans-serif" }}>สินค้า</th>
-                {WAREHOUSES.map((w) => (
-                  <th key={w} style={styles.th}>ค.{w}</th>
-                ))}
-                <th style={{ ...styles.th, ...styles.thTotal }}>รวม</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => {
-                const total = totals[p.id].remaining;
-                return (
-                  <tr key={p.id}>
-                    <td style={{ ...styles.td, ...styles.tdLeft, fontFamily: "'Inter', sans-serif" }}>
-                      <div style={{ fontWeight: 600, color: "#1F2A24" }}>{p.name} <span style={{ color: "#8A8477", fontWeight: 400 }}>· {p.type}</span></div>
-                      <div style={{ fontSize: 11, color: "#8A8477" }}>{p.category} · {p.size} · แพ็ค {p.pack}</div>
-                    </td>
-                    {WAREHOUSES.map((w) => {
-                      const r = balances[p.id][w].remaining;
-                      return (
-                        <td key={w} style={{ ...styles.td, color: r <= 0 ? "#B33A3A" : "#1F2A24" }}>
-                          {fmt(r)}
-                        </td>
-                      );
-                    })}
-                    <td style={{ ...styles.td, ...styles.tdTotal, color: total <= 0 ? "#B33A3A" : "#1F2A24" }}>
-                      {fmt(total)}
-                    </td>
-                  </tr>
-                );
-              })}
-              {products.length === 0 && (
-                <tr><td colSpan={WAREHOUSES.length + 2} style={styles.emptyRow}>ไม่พบสินค้าที่ค้นหา</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({ label, value, unit, accent = "#1F2A24" }) {
-  return (
-    <div style={styles.summaryCard}>
-      <div style={styles.summaryLabel}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <span style={{ ...styles.summaryValue, color: accent }}>{value}</span>
-        <span style={styles.summaryUnit}>{unit}</span>
-      </div>
-    </div>
-  );
-}
-
-function WarehouseView({ warehouse, products, balances, transactions, onAdd, onDelete }) {
-  const [productId, setProductId] = useState(products[0]?.id || "");
-  const [type, setType] = useState("in");
-  const [qty, setQty] = useState("");
-  const [cost, setCost] = useState("");
-  const [date, setDate] = useState(today());
-  const [note, setNote] = useState("");
-  const [error, setError] = useState("");
-
-  const categories = useMemo(() => [...new Set(products.map((p) => p.category))], [products]);
-
-  const submit = (e) => {
-    e.preventDefault();
-    const q = parseFloat(qty);
-    if (!productId) return setError("เลือกสินค้าก่อน");
-    if (!q || q <= 0) return setError("กรอกจำนวนให้ถูกต้อง");
-    if (type === "out") {
-      const currentRemaining = balances[productId][warehouse].remaining;
-      if (q > currentRemaining) {
-        setError(`คงเหลือมีเพียง ${fmt(currentRemaining)} หน่วย ไม่พอสำหรับเบิก`);
-        return;
+        );
       }
-    }
-    setError("");
-    onAdd({
-      productId,
-      warehouse,
-      type,
-      qty: q,
-      cost: type === "in" ? parseFloat(cost) || 0 : 0,
-      date,
-      note: note.trim(),
-    });
-    setQty("");
-    setCost("");
-    setNote("");
-  };
 
-  return (
-    <div>
-      <div style={styles.whHeaderRow}>
-        <div style={styles.whHeaderTitle}>โกดัง {warehouse}</div>
-        <div style={styles.whHeaderSub}>บันทึกรับเข้า / เบิกจ่าย และดูยอดคงเหลือของแต่ละสินค้า</div>
-      </div>
-
-      <form onSubmit={submit} style={styles.formCard}>
-        <div style={styles.formGrid}>
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>สินค้า</span>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)} style={styles.select}>
-              {categories.map((cat) => (
-                <optgroup label={cat} key={cat}>
-                  {products.filter((p) => p.category === cat).map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} · {p.type} · {p.size}</option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>ประเภทรายการ</span>
-            <div style={styles.segment}>
-              <button type="button" onClick={() => setType("in")}
-                style={{ ...styles.segmentBtn, ...(type === "in" ? styles.segmentBtnInActive : {}) }}>
-                <ArrowDownCircle size={14} /> รับเข้า
-              </button>
-              <button type="button" onClick={() => setType("out")}
-                style={{ ...styles.segmentBtn, ...(type === "out" ? styles.segmentBtnOutActive : {}) }}>
-                <ArrowUpCircle size={14} /> เบิกจ่าย
-              </button>
+      return (
+        <div className="min-h-screen pb-10">
+          <!-- Header -->
+          <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-stone-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-stone-900 flex items-center justify-center text-white font-bold">
+                📦
+              </div>
+              <div>
+                <h1 className="title-font font-bold text-lg">Pear Inventory</h1>
+                <p className="text-xs text-stone-500">ระบบจัดการคลังสินค้า · 6 โกดัง</p>
+              </div>
             </div>
-          </label>
+            {saveError && <div className="text-red-600 text-xs font-medium">{saveError}</div>}
+          </header>
 
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>จำนวน</span>
-            <input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} style={styles.input} placeholder="0" />
-          </label>
+          <!-- Navigation Tab -->
+          <nav className="flex gap-2 px-6 py-3 bg-white border-b border-stone-200 overflow-x-auto">
+            <button 
+              onClick={() => setTab("dashboard")} 
+              className={`px-4 py-2 rounded-lg text-sm font-medium border ${tab === 'dashboard' ? 'bg-stone-900 text-white border-stone-900' : 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+              ภาพรวม
+            </button>
+            {WAREHOUSES.map((w) => (
+              <button 
+                key={w} 
+                onClick={() => setTab(w)} 
+                className={`px-4 py-2 rounded-lg text-sm font-medium border mono ${tab === w ? 'bg-amber-700 text-white border-amber-700' : 'bg-stone-100 text-stone-600 border-stone-200'}`}>
+                โกดัง {String(w).padStart(2, "0")}
+              </button>
+            ))}
+          </nav>
 
-          {type === "in" && (
-            <label style={styles.field}>
-              <span style={styles.fieldLabel}>ต้นทุน/หน่วย (บาท)</span>
-              <input type="number" min="0" step="any" value={cost} onChange={(e) => setCost(e.target.value)} style={styles.input} placeholder="0.00" />
-            </label>
-          )}
+          <!-- Main Content Area -->
+          <main className="max-w-5xl mx-auto p-6">
+            {tab === "dashboard" && (
+              <div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white p-4 rounded-xl border border-stone-200">
+                    <div className="text-xs text-stone-500 mb-1">รายการสินค้าทั้งหมด</div>
+                    <div className="title-font font-bold text-2xl">{products.length} SKU</div>
+                  </div>
+                  <div className="bg-white p-4 rounded-xl border border-stone-200">
+                    <div className="text-xs text-stone-500 mb-1">ยอดคงเหลือรวมทุกโกดัง</div>
+                    <div className="title-font font-bold text-2xl text-emerald-800">{fmt(grandTotalRemaining)} หน่วย</div>
+                  </div>
+                </div>
 
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>วันที่</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.input} />
-          </label>
-
-          <label style={{ ...styles.field, gridColumn: "1 / -1" }}>
-            <span style={styles.fieldLabel}>หมายเหตุ (ไม่บังคับ)</span>
-            <input value={note} onChange={(e) => setNote(e.target.value)} style={styles.input} placeholder="เช่น เลขที่ใบส่งของ, ผู้เบิก" />
-          </label>
+                <!-- Product Table -->
+                <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-right">
+                      <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 text-xs uppercase">
+                        <tr>
+                          <th className="p-3 text-left">สินค้า</th>
+                          {WAREHOUSES.map(w => <th key={w} className="p-3">ค.{w}</th>)}
+                          <th className="p-3 bg-amber-50">รวม</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100 mono">
+                        {products.map(p => (
+                          <tr key={p.id}>
+                            <td className="p-3 text-left font-sans">
+                              <div className="font-semibold text-stone-900">{p.name} <span className="text-stone-400 font-normal">· {p.type}</span></div>
+                              <div className="text-xs text-stone-400">{p.category} · {p.size}</div>
+                            </td>
+                            {WAREHOUSES.map(w => (
+                              <td key={w} className="p-3">{fmt(balances[p.id][w].remaining)}</td>
+                            ))}
+                            <td className="p-3 font-bold bg-amber-50">{fmt(totals[p.id].remaining)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
         </div>
+      );
+    }
 
-        {error && <div style={styles.formError}><AlertTriangle size={14} /> {error}</div>}
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<InventoryApp />);
+  </script>
 
-        <button type="submit" style={styles.submitBtn}><Plus size={15} /> บันทึกรายการ</button>
-      </form>
-
-      <div style={styles.tableCard}>
-        <div style={styles.tableCardHeader}>ยอดคงเหลือในโกดัง {warehouse}</div>
-        <div style={{ overflowX: "auto" }}>
-          <table className="ledger" style={styles.table}>
-            <thead>
-              <tr>
-                <th style={{ ...styles.th, ...styles.thLeft, fontFamily: "'Inter', sans-serif" }}>สินค้า</th>
-                <th style={styles.th}>รับเข้า</th>
-                <th style={styles.th}>เบิกจ่าย</th>
-                <th style={styles.th}>คงเหลือ</th>
-                <th style={styles.th}>มูลค่าสินค้าคงเหลือ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => {
-                const c = balances[p.id][warehouse];
-                return (
-                  <tr key={p.id}>
-                    <td style={{ ...styles.td, ...styles.tdLeft, fontFamily: "'Inter', sans-serif" }}>
-                      <div style={{ fontWeight: 600, color: "#1F2A24" }}>{p.name} <span style={{ color: "#8A8477", fontWeight: 400 }}>· {p.type} · {p.size}</span></div>
-                    </td>
-                    <td style={styles.td}>{fmt(c.qtyIn)}</td>
-                    <td style={styles.td}>{fmt(c.qtyOut)}</td>
-                    <td style={{ ...styles.td, fontWeight: 600, color: c.remaining <= 0 ? "#B33A3A" : "#3F6B4E" }}>{fmt(c.remaining)}</td>
-                    <td style={styles.td}>{fmtMoney(c.value)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div style={styles.tableCard}>
-        <div style={styles.tableCardHeader}>รายการล่าสุดในโกดัง {warehouse}</div>
-        <TransactionList
-          products={products}
-          transactions={transactions.slice(0, 15)}
-          onDelete={onDelete}
-          showWarehouse={false}
-        />
-      </div>
-    </div>
-  );
-}
-
-function HistoryView({ products, transactions, onDelete }) {
-  const [wFilter, setWFilter] = useState("all");
-  const filtered = useMemo(
-    () => (wFilter === "all" ? transactions : transactions.filter((t) => t.warehouse === Number(wFilter))),
-    [transactions, wFilter]
-  );
-  return (
-    <div>
-      <div style={styles.whHeaderRow}>
-        <div style={styles.whHeaderTitle}>ประวัติรายการทั้งหมด</div>
-        <div style={styles.whHeaderSub}>รับเข้า/เบิกจ่ายทุกโกดัง เรียงล่าสุดก่อน</div>
-      </div>
-      <div style={{ marginBottom: 12 }}>
-        <select value={wFilter} onChange={(e) => setWFilter(e.target.value)} style={styles.select}>
-          <option value="all">ทุกโกดัง</option>
-          {WAREHOUSES.map((w) => <option key={w} value={w}>โกดัง {w}</option>)}
-        </select>
-      </div>
-      <div style={styles.tableCard}>
-        <TransactionList products={products} transactions={filtered} onDelete={onDelete} showWarehouse />
-      </div>
-    </div>
-  );
-}
-
-function TransactionList({ products, transactions, onDelete, showWarehouse }) {
-  const productMap = useMemo(() => Object.fromEntries(products.map((p) => [p.id, p])), [products]);
-  if (transactions.length === 0) {
-    return <div style={styles.emptyRow}>ยังไม่มีรายการ</div>;
-  }
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table className="ledger" style={styles.table}>
-        <thead>
-          <tr>
-            <th style={{ ...styles.th, ...styles.thLeft, fontFamily: "'Inter', sans-serif" }}>วันที่</th>
-            <th style={{ ...styles.th, ...styles.thLeft, fontFamily: "'Inter', sans-serif" }}>สินค้า</th>
-            {showWarehouse && <th style={styles.th}>โกดัง</th>}
-            <th style={styles.th}>ประเภท</th>
-            <th style={styles.th}>จำนวน</th>
-            <th style={styles.th}>ต้นทุน/หน่วย</th>
-            <th style={{ ...styles.th, ...styles.thLeft, fontFamily: "'Inter', sans-serif" }}>หมายเหตุ</th>
-            <th style={styles.th}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((t) => {
-            const p = productMap[t.productId];
-            return (
-              <tr key={t.id}>
-                <td style={styles.td}>{t.date}</td>
-                <td style={{ ...styles.td, ...styles.tdLeft, fontFamily: "'Inter', sans-serif" }}>
-                  {p ? `${p.name} · ${p.type} · ${p.size}` : "—"}
-                </td>
-                {showWarehouse && <td style={styles.td}>{t.warehouse}</td>}
-                <td style={{ ...styles.td, color: t.type === "in" ? "#3F6B4E" : "#B33A3A", fontWeight: 600 }}>
-                  {t.type === "in" ? "รับเข้า" : "เบิกจ่าย"}
-                </td>
-                <td style={styles.td}>{fmt(t.qty)}</td>
-                <td style={styles.td}>{t.type === "in" ? fmtMoney(t.cost) : "—"}</td>
-                <td style={{ ...styles.td, ...styles.tdLeft, fontFamily: "'Inter', sans-serif", color: "#5B6A61" }}>{t.note || "—"}</td>
-                <td style={styles.td}>
-                  <button onClick={() => onDelete(t.id)} style={styles.deleteBtn} title="ลบรายการ">
-                    <Trash2 size={14} />
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-const styles = {
-  app: {
-    minHeight: "100vh",
-    background: "#F6F5F1",
-    fontFamily: "'Inter', sans-serif",
-    color: "#1F2A24",
-    paddingBottom: 40,
-  },
-  loadingWrap: {
-    minHeight: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#F6F5F1",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justify.content: "space-between",
-    padding: "18px 24px",
-    borderBottom: "1px solid #E4E1D8",
-    background: "#FFFFFF",
-  },
-  headerLeft: { display: "flex", alignItems: "center", gap: 12 },
-  logoMark: {
-    width: 38, height: 38, borderRadius: 8, background: "#1F2A24",
-    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-  },
-  title: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, lineHeight: 1.2 },
-  subtitle: { fontSize: 12, color: "#8A8477", marginTop: 2 },
-  saveError: { display: "flex", alignItems: "center", gap: 6, color: "#B33A3A", fontSize: 12, fontWeight: 500 },
-
-  tabBar: {
-    display: "flex", gap: 8, padding: "12px 24px", overflowX: "auto",
-    background: "#FFFFFF", borderBottom: "1px solid #E4E1D8",
-  },
-  tabBtn: {
-    display: "flex", alignItems: "center", gap: 6, padding: "8px 14px",
-    borderRadius: 8, border: "1px solid #E4E1D8", background: "#F6F5F1",
-    color: "#5B6A61", fontSize: 13, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap",
-    fontFamily: "'Inter', sans-serif",
-  },
-  tabBtnActive: { background: "#1F2A24", color: "#F6F5F1", borderColor: "#1F2A24" },
-
-  binTab: {
-    position: "relative", display: "flex", alignItems: "center", gap: 6,
-    padding: "8px 14px 8px 20px", borderRadius: 8, border: "1px solid #E4E1D8",
-    background: "#F6F5F1", color: "#5B6A61", cursor: "pointer", whiteSpace: "nowrap",
-    fontFamily: "'IBM Plex Mono', monospace", fontSize: 13,
-  },
-  binTabActive: { background: "#B8862B", color: "#FFFFFF", borderColor: "#B8862B" },
-  binHole: {
-    position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)",
-    width: 6, height: 6, borderRadius: "50%", background: "rgba(0,0,0,0.15)",
-  },
-  binLabel: { opacity: 0.8, fontSize: 11 },
-  binNumber: { fontWeight: 600 },
-
-  main: { maxWidth: 1080, margin: "0 auto", padding: "20px 24px" },
-
-  summaryRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 },
-  summaryCard: { background: "#FFFFFF", border: "1px solid #E4E1D8", borderRadius: 10, padding: "14px 16px" },
-  summaryLabel: { fontSize: 12, color: "#8A8477", marginBottom: 6 },
-  summaryValue: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 26 },
-  summaryUnit: { fontSize: 12, color: "#8A8477" },
-
-  searchWrap: {
-    display: "flex", alignItems: "center", gap: 8, background: "#FFFFFF",
-    border: "1px solid #E4E1D8", borderRadius: 8, padding: "9px 12px", marginBottom: 14,
-  },
-  searchInput: { border: "none", outline: "none", flex: 1, fontSize: 13, fontFamily: "'Inter', sans-serif", background: "transparent" },
-
-  tableCard: { background: "#FFFFFF", border: "1px solid #E4E1D8", borderRadius: 10, marginBottom: 16, overflow: "hidden" },
-  tableCardHeader: { padding: "12px 16px", fontWeight: 600, fontSize: 13, borderBottom: "1px solid #E4E1D8", color: "#1F2A24" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
-  th: {
-    padding: "10px 12px", textAlign: "right", fontWeight: 600, fontSize: 11,
-    color: "#8A8477", textTransform: "uppercase", letterSpacing: "0.03em",
-    borderBottom: "1px solid #E4E1D8", whiteSpace: "nowrap",
-  },
-  thLeft: { textAlign: "left" },
-  thTotal: { background: "#FAF6EC" },
-  td: { padding: "10px 12px", textAlign: "right", borderBottom: "1px solid #EFEDE6", whiteSpace: "nowrap" },
-  tdLeft: { textAlign: "left", whiteSpace: "normal" },
-  tdTotal: { background: "#FAF6EC", fontWeight: 700 },
-  emptyRow: { padding: 24, textAlign: "center", color: "#8A8477", fontSize: 13 },
-
-  whHeaderRow: { marginBottom: 16 },
-  whHeaderTitle: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 20 },
-  whHeaderSub: { fontSize: 13, color: "#8A8477", marginTop: 2 },
-
-  formCard: { background: "#FFFFFF", border: "1px solid #E4E1D8", borderRadius: 10, padding: 16, marginBottom: 16 },
-  formGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 12 },
-  field: { display: "flex", flexDirection: "column", gap: 5 },
-  fieldLabel: { fontSize: 12, color: "#5B6A61", fontWeight: 500 },
-  input: {
-    border: "1px solid #E4E1D8", borderRadius: 7, padding: "8px 10px", fontSize: 13,
-    fontFamily: "'IBM Plex Mono', monospace", outline: "none", background: "#FAF9F6",
-  },
-  select: {
-    border: "1px solid #E4E1D8", borderRadius: 7, padding: "8px 10px", fontSize: 13,
-    fontFamily: "'Inter', sans-serif", outline: "none", background: "#FAF9F6",
-  },
-  segment: { display: "flex", gap: 6 },
-  segmentBtn: {
-    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-    padding: "8px 10px", borderRadius: 7, border: "1px solid #E4E1D8", background: "#FAF9F6",
-    color: "#5B6A61", fontSize: 12, fontWeight: 500, cursor: "pointer",
-  },
-  segmentBtnInActive: { background: "#3F6B4E", color: "#FFFFFF", borderColor: "#3F6B4E" },
-  segmentBtnOutActive: { background: "#B33A3A", color: "#FFFFFF", borderColor: "#B33A3A" },
-  formError: { display: "flex", alignItems: "center", gap: 6, color: "#B33A3A", fontSize: 12, marginBottom: 10 },
-  submitBtn: {
-    display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 8,
-    border: "none", background: "#1F2A24", color: "#F6F5F1", fontSize: 13, fontWeight: 600, cursor: "pointer",
-  },
-  deleteBtn: {
-    border: "none", background: "transparent", color: "#B33A3A", cursor: "pointer",
-    display: "flex", alignItems: "center", padding: 4,
-  },
-};
+</body>
+</html>
