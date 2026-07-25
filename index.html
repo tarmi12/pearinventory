@@ -15,9 +15,6 @@
   <!-- 3. ดึง Babel เพื่อแปลงโค้ด JSX บนเบราว์เซอร์ -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
-  <!-- 4. ดึง Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-
   <!-- ฟอนต์ภาษาไทยและฟอนต์ตัวเลข -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap">
 
@@ -35,7 +32,7 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useCallback } = React;
 
-    // ⚠️ ใส่ Web App URL ของ Google Apps Script ของคุณที่นี่
+    // Web App URL ของ Google Apps Script
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzWBYTh_hX4LqWJVccv92iEFIlh2ccdQONP5ru9aSqmrLP4r9xAJqiH_oc4ck0cvY7qbA/exec";
 
     const DEFAULT_PRODUCTS = [
@@ -56,8 +53,6 @@
 
     const WAREHOUSES = [1, 2, 3, 4, 5, 6];
     const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString("th-TH") : "0");
-    const fmtMoney = (n) => Number.isFinite(n) ? n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
-    const today = () => new Date().toISOString().slice(0, 10);
 
     function InventoryApp() {
       const [products] = useState(DEFAULT_PRODUCTS);
@@ -65,7 +60,6 @@
       const [loading, setLoading] = useState(true);
       const [saveError, setSaveError] = useState(null);
       const [tab, setTab] = useState("dashboard");
-      const [query, setQuery] = useState("");
 
       // ดึงข้อมูลจาก Google Sheets
       const fetchTransactions = useCallback(async () => {
@@ -75,20 +69,19 @@
           const data = await res.json();
           if (data.status === "success" && Array.isArray(data.transactions)) {
             setTransactions(data.transactions);
+            setSaveError(null);
+          } else {
+            setSaveError(data.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล");
           }
         } catch (e) {
-          setSaveError("ไม่สามารถเชื่อมต่อกับ Google Sheets ได้");
+          setSaveError("ไม่สามารถเชื่อมต่อกับ Google Sheets ได้ กรุณาเช็คสิทธิ์การใช้งานของ Web App");
         } finally {
           setLoading(false);
         }
       }, []);
 
       useEffect(() => {
-        if (GAS_API_URL !== "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE") {
-          fetchTransactions();
-        } else {
-          setLoading(false);
-        }
+        fetchTransactions();
       }, [fetchTransactions]);
 
       // คำนวณยอดคงเหลือ
@@ -146,7 +139,7 @@
 
       return (
         <div className="min-h-screen pb-10">
-          <!-- Header -->
+          {/* Header */}
           <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-stone-200">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-stone-900 flex items-center justify-center text-white font-bold">
@@ -157,10 +150,10 @@
                 <p className="text-xs text-stone-500">ระบบจัดการคลังสินค้า · 6 โกดัง</p>
               </div>
             </div>
-            {saveError && <div className="text-red-600 text-xs font-medium">{saveError}</div>}
+            {saveError && <div className="text-red-600 text-xs font-medium bg-red-50 p-2 rounded-lg">{saveError}</div>}
           </header>
 
-          <!-- Navigation Tab -->
+          {/* Navigation Tab */}
           <nav className="flex gap-2 px-6 py-3 bg-white border-b border-stone-200 overflow-x-auto">
             <button 
               onClick={() => setTab("dashboard")} 
@@ -177,11 +170,11 @@
             ))}
           </nav>
 
-          <!-- Main Content Area -->
+          {/* Main Content Area */}
           <main className="max-w-5xl mx-auto p-6">
             {tab === "dashboard" && (
               <div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div className="bg-white p-4 rounded-xl border border-stone-200">
                     <div className="text-xs text-stone-500 mb-1">รายการสินค้าทั้งหมด</div>
                     <div className="title-font font-bold text-2xl">{products.length} SKU</div>
@@ -192,7 +185,7 @@
                   </div>
                 </div>
 
-                <!-- Product Table -->
+                {/* Product Table */}
                 <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm text-right">
